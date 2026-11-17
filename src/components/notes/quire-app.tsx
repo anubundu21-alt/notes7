@@ -16,7 +16,6 @@ import {
   RotateCcw,
   Search,
   Trash2,
-  Type,
   Upload,
   X,
 } from "lucide-react";
@@ -42,22 +41,21 @@ import { findLiveByTitle, noteOutline, notesLinkingTo, wikiTitles, type OutlineI
 import { hydrateNotes, useNotesStore } from "@/lib/notes-store";
 import { exportNotebook, importNotebook } from "@/lib/transfer";
 
-const FORMAT_KEY = "quire.formatbar";
 const SIDEBAR_KEY = "quire.sidebar";
 
 type Pane = "list" | "note";
 
 const SHORTCUTS: { action: string; keys: string[] }[] = [
-  { action: "New note", keys: ["N", "Ctrl/\u2318 N"] },
+  { action: "New note", keys: ["N", "Ctrl/⌘ N"] },
   { action: "Today's note", keys: ["D"] },
-  { action: "Search", keys: ["/", "Ctrl/\u2318 K"] },
-  { action: "Write, split, preview", keys: ["Ctrl/\u2318", "Enter"] },
-  { action: "Bold", keys: ["Ctrl/\u2318 B"] },
-  { action: "Italic", keys: ["Ctrl/\u2318 I"] },
-  { action: "Next note", keys: ["J", "Alt \u2193"] },
-  { action: "Previous note", keys: ["K", "Alt \u2191"] },
-  { action: "Move to trash", keys: ["Ctrl/\u2318 Shift", "\u232b"] },
-  { action: "Hide or show notes", keys: ["Ctrl/\u2318 \\"] },
+  { action: "Search", keys: ["/", "Ctrl/⌘ K"] },
+  { action: "Write, split, preview", keys: ["Ctrl/⌘", "Enter"] },
+  { action: "Bold", keys: ["Ctrl/⌘ B"] },
+  { action: "Italic", keys: ["Ctrl/⌘ I"] },
+  { action: "Next note", keys: ["J", "Alt ↓"] },
+  { action: "Previous note", keys: ["K", "Alt ↑"] },
+  { action: "Move to trash", keys: ["Ctrl/⌘ Shift", "⌫"] },
+  { action: "Hide or show notes", keys: ["Ctrl/⌘ \\"] },
   { action: "Close or go back", keys: ["Esc"] },
   { action: "This list", keys: ["?"] },
 ];
@@ -212,7 +210,7 @@ export function QuireApp() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkQuery, setLinkQuery] = useState("");
   const [tagDraft, setTagDraft] = useState("");
-  const [formatOpen, setFormatOpen] = useState(false);
+  const [formatBox, setFormatBox] = useState<{ top: number; left: number } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [wide, setWide] = useState(false);
   const [immersed, setImmersed] = useState(false);
@@ -263,10 +261,75 @@ export function QuireApp() {
 
   useEffect(() => {
     hydrateNotes();
-    setFormatOpen(localStorage.getItem(FORMAT_KEY) === "1");
     const open = localStorage.getItem(SIDEBAR_KEY) !== "0";
     sidebarOpenRef.current = open;
     setSidebarOpen(open);
+  }, []);
+
+  useEffect(() => {
+    const bodySelection = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+      const anchor = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
+      const focus = selection.focusNode instanceof Element ? selection.focusNode : selection.focusNode?.parentElement;
+      if (!anchor?.closest("[data-field='body']") || !focus?.closest("[data-field='body']")) return null;
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      if (rect.width < 1 && rect.height < 1) return null;
+      const bar = 52;
+      let top = rect.top - bar - 8;
+      if (top < 8) top = Math.min(window.innerHeight - bar - 8, rect.bottom + 8);
+      const mid = rect.left + rect.width / 2;
+      const left = Math.min(window.innerWidth - 12, Math.max(12, mid));
+      return { top, left };
+    };
+
+    let dragging = false;
+
+    const show = () => {
+      const next = bodySelection();
+      setFormatBox((current) => {
+        if (!next) return current ? null : current;
+        if (current && Math.abs(current.top - next.top) < 1 && Math.abs(current.left - next.left) < 1) return current;
+        return next;
+      });
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-format-bar]")) return;
+      dragging = target instanceof Element && Boolean(target.closest("[data-field='body']"));
+      if (!dragging) show();
+    };
+    const onPointerUp = () => {
+      dragging = false;
+      show();
+    };
+    const onSelection = () => {
+      if (dragging) return;
+      show();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFormatBox(null);
+        return;
+      }
+      show();
+    };
+
+    document.addEventListener("selectionchange", onSelection);
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("keyup", onKeyUp);
+    window.addEventListener("scroll", show, true);
+    window.addEventListener("resize", show);
+    return () => {
+      document.removeEventListener("selectionchange", onSelection);
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("scroll", show, true);
+      window.removeEventListener("resize", show);
+    };
   }, []);
 
   useEffect(() => {
@@ -679,6 +742,19 @@ export function QuireApp() {
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-paper text-ink">
+      {formatBox
+        ? createPortal(
+            <div
+              data-format-bar
+              className="fixed z-40 -translate-x-1/2"
+              style={{ top: formatBox.top, left: formatBox.left }}
+              onMouseDown={(event) => event.preventDefault()}
+            >
+              <FormatToolbar onFormat={formatBody} />
+            </div>,
+            document.body,
+          )
+        : null}
       <aside
         aria-label="Notes"
         className={clsx(
@@ -828,7 +904,7 @@ export function QuireApp() {
                   ? "Deleted notes wait here until you restore or remove them."
                   : live.length === 0
                     ? "Start one when you're ready."
-                    : `Nothing contains \u201c${query.trim() || tag || ""}\u201d.`}
+                    : `Nothing contains “${query.trim() || tag || ""}”.`}
               </p>
               {query ? (
                 <button
@@ -1070,26 +1146,6 @@ export function QuireApp() {
                         <Link2 className="size-4" aria-hidden="true" />
                         Link
                       </button>
-                      <button
-                        type="button"
-                        aria-pressed={formatOpen}
-                        aria-label={formatOpen ? "Hide formatting" : "Show formatting"}
-                        title={formatOpen ? "Hide formatting" : "Formatting"}
-                        onClick={() => {
-                          setFormatOpen((open) => {
-                            const next = !open;
-                            localStorage.setItem(FORMAT_KEY, next ? "1" : "0");
-                            return next;
-                          });
-                        }}
-                        className={clsx(
-                          "inline-flex h-11 items-center gap-1.5 rounded-lg px-2 text-sm",
-                          formatOpen ? "bg-paper-deep text-ink" : "text-muted hover:bg-paper-deep hover:text-ink",
-                        )}
-                      >
-                        <Type className="size-4" aria-hidden="true" />
-                        Format
-                      </button>
                       {active.tags.map((item) => (
                         <span key={item} className="inline-flex h-11 items-center rounded-full bg-paper-deep pl-3 text-sm">
                           <button type="button" onClick={() => { setTag(item); setLibrary("notes"); }} className="text-ink">
@@ -1126,7 +1182,6 @@ export function QuireApp() {
                         />
                       </form>
                     </div>
-                    {formatOpen && !immersed ? <FormatToolbar onFormat={formatBody} /> : null}
                     <RichEditor
                       key={active.id}
                       ref={bodyRef}
@@ -1236,7 +1291,7 @@ export function QuireApp() {
       {helpOpen ? (
         <Modal title="Shortcuts" titleId="quire-help-title" onClose={() => setHelpOpen(false)} initialFocus={helpCloseRef}>
           <p className="mt-2 text-sm text-pretty text-muted">
-            Single-key shortcuts work when you aren't typing. On a Mac, \u2318 stands in for Ctrl.
+            Single-key shortcuts work when you aren't typing. On a Mac, ⌘ stands in for Ctrl.
           </p>
           <ul className="mt-4 flex flex-col gap-3">
             {SHORTCUTS.map((row) => (
@@ -1274,8 +1329,8 @@ export function QuireApp() {
         >
           <p className="mt-2 text-sm text-pretty text-muted">
             {confirmNote.deletedAt
-              ? `\u201c${confirmNote.title || "Untitled"}\u201d will be removed from this browser. This can\u2019t be undone.`
-              : `\u201c${confirmNote.title || "Untitled"}\u201d stays in the trash until you restore it or delete it forever.`}
+              ? `“${confirmNote.title || "Untitled"}” will be removed from this browser. This can’t be undone.`
+              : `“${confirmNote.title || "Untitled"}” stays in the trash until you restore it or delete it forever.`}
           </p>
           <div className="mt-6 flex justify-end gap-2">
             <button
@@ -1300,7 +1355,7 @@ export function QuireApp() {
       {confirmEmpty ? (
         <Modal title="Empty the trash?" titleId="quire-empty-title" onClose={() => setConfirmEmpty(false)} initialFocus={keepRef}>
           <p className="mt-2 text-sm text-pretty text-muted">
-            {trashed.length} {trashed.length === 1 ? "note" : "notes"} will be removed from this browser. This can\u2019t be undone.
+            {trashed.length} {trashed.length === 1 ? "note" : "notes"} will be removed from this browser. This can’t be undone.
           </p>
           <div className="mt-6 flex justify-end gap-2">
             <button

@@ -53,7 +53,7 @@ export function FormatToolbar({ onFormat }: { onFormat: (id: FormatId) => void }
       role="toolbar"
       aria-label="Formatting"
       aria-orientation="horizontal"
-      className="quire-scroll mt-4 flex w-full min-w-0 shrink-0 items-center gap-0.5 overflow-x-auto rounded-xl bg-paper-deep p-1"
+      className="quire-scroll flex w-max max-w-[min(100vw-1rem,40rem)] items-center gap-0.5 overflow-x-auto rounded-xl border border-line bg-card p-1 shadow-[0_12px_32px_rgba(17,17,17,0.16)]"
     >
       {GROUPS.map((group, index) => (
         <div key={group[0]?.id ?? index} className="flex shrink-0 items-center">
